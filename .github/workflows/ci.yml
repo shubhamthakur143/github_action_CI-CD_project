@@ -1,32 +1,62 @@
-docker:
-  runs-on: ubuntu-latest
-  needs: test
+name: CI
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+on:
+  push:
+    branches:
+      - main
 
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+  pull_request:
+    branches:
+      - main
 
-    - name: Build Docker image
-      run: |
-        docker build \
-          -t ${{ secrets.DOCKERHUB_USERNAME }}/github-action-app:${{ github.sha }} .
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-    - name: List Docker images
-      run: docker images
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Scan Docker image
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/github-action-app:${{ github.sha }}
-        severity: CRITICAL,HIGH
-        exit-code: '1'
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Push Docker image
-      run: |
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/github-action-app:${{ github.sha }}
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest
+
+      - name: Run lint
+        run: flake8 .
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/github-action-app:${{ github.sha }} .
+
+      - name: List Docker images
+        run: docker images
+
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/github-action-app:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+      - name: Push Docker image
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/github-action-app:${{ github.sha }}
